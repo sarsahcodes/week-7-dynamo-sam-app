@@ -56,15 +56,23 @@ can be answered by a `Query` on the base table.
 │   └── deploy-prod.yml               # main branch → prod stack only (approval gate)
 ├── scripts/
 │   ├── bootstrap.sh                  # run once per environment
+│   ├── set-github-vars.sh            # push the stack outputs into GitHub
+│   ├── deploy.ps1                    # manual validate/build/deploy (Windows)
 │   ├── seed-items.sh                 # load the sample orders
 │   └── verify.sh                     # prove billing mode, table class, both GSIs
 ├── seed/
 │   ├── sample-orders.json            # 5 orders across 3 customers and 4 statuses
 │   └── console-item.json             # single item to paste into the console
-└── docs/CONSOLE-VERIFICATION.md      # click-by-click CRUD walkthrough
+└── docs/
+    ├── DEPLOYMENT.md                 # full deployment guide + troubleshooting
+    └── CONSOLE-VERIFICATION.md       # click-by-click CRUD walkthrough
 ```
 
 ---
+
+> **Full step-by-step deployment guide, including troubleshooting for every error
+> we hit:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The sections below are the
+> condensed version.
 
 ## 3. One-time setup
 
