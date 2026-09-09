@@ -1,9 +1,23 @@
 {
-  "orderId": "ORD-2001",
-  "createdAt": "2026-09-09T10:00:00Z",
-  "customerId": "CUST-004",
-  "orderStatus": "PENDING",
-  "totalAmount": 599.99,
-  "currency": "GHS",
-  "itemCount": 5
+  "orderId": {
+    "S": "ORD-2002"
+  },
+  "createdAt": {
+    "S": "2026-09-09T11:30:00Z"
+  },
+  "customerId": {
+    "S": "CUST-004"
+  },
+  "orderStatus": {
+    "S": "SHIPPED"
+  },
+  "totalAmount": {
+    "N": "120.00"
+  },
+  "currency": {
+    "S": "GHS"
+  },
+  "itemCount": {
+    "N": "2"
+  }
 }
