@@ -1,0 +1,54 @@
+{
+  // CloudFormation / SAM use YAML short-form intrinsic functions (!Sub, !Ref,
+  // !GetAtt, !If ...). The generic YAML language server does not know them and
+  // reports "Unresolved tag: !Sub" unless they are declared here.
+  "yaml.customTags": [
+    "!And",
+    "!And sequence",
+    "!Base64",
+    "!Base64 mapping",
+    "!Cidr",
+    "!Cidr sequence",
+    "!Condition",
+    "!Equals",
+    "!Equals sequence",
+    "!FindInMap",
+    "!FindInMap sequence",
+    "!GetAZs",
+    "!GetAtt",
+    "!GetAtt sequence",
+    "!If",
+    "!If sequence",
+    "!ImportValue",
+    "!ImportValue mapping",
+    "!Join",
+    "!Join sequence",
+    "!Not",
+    "!Not sequence",
+    "!Or",
+    "!Or sequence",
+    "!Ref",
+    "!Select",
+    "!Select sequence",
+    "!Split",
+    "!Split sequence",
+    "!Sub",
+    "!Sub mapping",
+    "!Sub sequence",
+    "!Transform",
+    "!Transform mapping"
+  ],
+
+  // Don't let the YAML extension try to match these against a generic schema.
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/aws-cloudformation/cfn-lint/main/src/cfnlint/data/schemas/other/resources/configuration.json": [
+      "template.yaml",
+      "bootstrap/*.yaml"
+    ]
+  },
+
+  "files.associations": {
+    "template.yaml": "yaml",
+    "bootstrap/*.yaml": "yaml"
+  }
+}
