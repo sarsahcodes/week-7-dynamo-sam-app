@@ -295,10 +295,29 @@ the pipeline — the pipeline run is what the rubric scores.
 
 ## 6. Verification
 
-```bash
-./scripts/seed-items.sh dev     # 5 orders across 3 customers, 4 statuses
-./scripts/verify.sh dev         # config + one query against each GSI
+**PowerShell:**
+
+```powershell
+.\scripts\seed-items.ps1 -Environment dev   # 5 orders across 3 customers, 4 statuses
+.\scripts\verify.ps1     -Environment dev   # config + one query against each GSI
 ```
+
+**Git Bash:**
+
+```bash
+./scripts/seed-items.sh dev
+./scripts/verify.sh dev
+```
+
+**Or a single item by hand**, which is what the rubric asks you to demonstrate:
+
+```powershell
+aws dynamodb put-item --table-name week7-orders-dev --region eu-central-1 `
+  --item file://seed/console-item.json
+```
+
+That file is in plain JSON, not DynamoDB JSON, so it is also the exact text to
+paste into the console's *Create item -> JSON view*.
 
 Expected table configuration:
 
@@ -362,6 +381,28 @@ source ~/.bashrc
 
 You do not need SAM locally for the pipeline — the runners install it themselves
 via `aws-actions/setup-sam`.
+
+### A push does not start any workflow run
+
+Check, in order:
+
+```powershell
+gh run list --limit 10                       # has anything ever run?
+gh workflow list                             # are the workflows registered?
+git log origin/develop --oneline -1          # did the push actually land?
+```
+
+* **`gh workflow list` is empty** - the workflow files are not on the branch you
+  pushed. They must exist at `.github/workflows/` on that branch.
+* **Workflows listed but disabled** - re-enable with
+  `gh workflow enable "Deploy DEV"`, or Settings -> Actions -> *Allow all actions*.
+* **The push did not land** - `git status` will show unpushed commits.
+* **Nothing changed in the triggering paths** - earlier versions of these
+  workflows had a `paths:` filter, so doc-only commits were ignored. That filter
+  has been removed; any push to the branch now runs the pipeline.
+
+You can always start a run by hand: **Actions -> Deploy DEV -> Run workflow**, or
+`gh workflow run "Deploy DEV" --ref develop`.
 
 ### `Not authorized to perform sts:AssumeRoleWithWebIdentity`
 

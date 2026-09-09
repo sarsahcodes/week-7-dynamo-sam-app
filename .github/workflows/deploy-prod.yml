@@ -9,10 +9,6 @@ name: Deploy PROD
 on:
   push:
     branches: [main]
-    paths:
-      - 'template.yaml'
-      - 'samconfig.toml'
-      - '.github/workflows/deploy-prod.yml'
   workflow_dispatch:
 
 permissions:

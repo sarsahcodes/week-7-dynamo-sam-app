@@ -9,10 +9,6 @@ name: Deploy DEV
 on:
   push:
     branches: [develop]
-    paths:
-      - 'template.yaml'
-      - 'samconfig.toml'
-      - '.github/workflows/deploy-dev.yml'
   workflow_dispatch:
 
 # Short-lived credentials via OpenID Connect - no AWS keys stored in GitHub.
