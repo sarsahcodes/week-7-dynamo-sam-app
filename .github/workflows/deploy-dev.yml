@@ -1,0 +1,120 @@
+# =============================================================================
+# DEVELOPMENT pipeline - deploys ONLY the dev stack, from the develop branch,
+# using the dev artifact bucket and the dev OIDC deploy role.
+# This is a hand-written replacement for the auto-generated multi-environment
+# `sam pipeline init` workflow, which packed both stages into one file.
+# =============================================================================
+name: Deploy DEV
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'template.yaml'
+      - 'samconfig.toml'
+      - '.github/workflows/deploy-dev.yml'
+  workflow_dispatch:
+
+# Short-lived credentials via OpenID Connect - no AWS keys stored in GitHub.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+env:
+  SAM_CONFIG_ENV: dev
+  STACK_NAME: week7-orders-dev
+  TABLE_NAME: week7-orders-dev
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  validate:
+    name: Lint and validate template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: cfn-lint
+        run: |
+          pip install --quiet cfn-lint
+          cfn-lint template.yaml bootstrap/*.yaml
+
+      - name: sam validate
+        run: sam validate --template template.yaml --region "${{ vars.AWS_REGION }}"
+
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy dev stack
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: dev            # GitHub Environment holding the dev variables
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Assume dev deployment role (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: gha-deploy-dev-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: SAM build
+        run: sam build --template template.yaml
+
+      - name: SAM deploy (dev)
+        run: |
+          sam deploy \
+            --config-env "${SAM_CONFIG_ENV}" \
+            --stack-name "${STACK_NAME}" \
+            --s3-bucket "${{ vars.ARTIFACT_BUCKET }}" \
+            --s3-prefix "week7-orders/dev" \
+            --region "${{ vars.AWS_REGION }}" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "Environment=dev AppName=week7-orders"
+
+      - name: Verify deployed table against the lab requirements
+        run: |
+          set -euo pipefail
+          aws dynamodb describe-table --table-name "${TABLE_NAME}" > table.json
+
+          BILLING=$(jq -r '.Table.BillingModeSummary.BillingMode' table.json)
+          CLASS=$(jq -r '.Table.TableClassSummary.TableClass // "STANDARD"' table.json)
+          GSIS=$(jq -r '[.Table.GlobalSecondaryIndexes[].IndexName] | join(", ")' table.json)
+          GSI_COUNT=$(jq -r '.Table.GlobalSecondaryIndexes | length' table.json)
+
+          echo "Billing mode : $BILLING"
+          echo "Table class  : $CLASS"
+          echo "GSIs ($GSI_COUNT)     : $GSIS"
+
+          [ "$BILLING" = "PAY_PER_REQUEST" ]           || { echo "::error::billing mode is not On-Demand"; exit 1; }
+          [ "$CLASS" = "STANDARD_INFREQUENT_ACCESS" ]  || { echo "::error::table is on the default storage class"; exit 1; }
+          [ "$GSI_COUNT" -ge 2 ]                       || { echo "::error::fewer than two GSIs"; exit 1; }
+
+          {
+            echo "### DEV deployment verified :white_check_mark:"
+            echo ""
+            echo "| Check | Value |"
+            echo "| --- | --- |"
+            echo "| Table | \`$TABLE_NAME\` |"
+            echo "| Billing mode | \`$BILLING\` |"
+            echo "| Table class | \`$CLASS\` |"
+            echo "| GSIs | \`$GSIS\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

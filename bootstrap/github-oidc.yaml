@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Bootstrap stack (2 of 2) - GitHub Actions OIDC trust for a single environment.
+  Creates (optionally) the GitHub OIDC identity provider and one IAM deployment
+  role that GitHub Actions assumes with short-lived credentials. No long-lived
+  AWS access keys are ever stored in GitHub.
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+
+  AppName:
+    Type: String
+    Default: week7-orders
+    AllowedPattern: '^[a-z0-9][a-z0-9-]{2,32}$'
+
+  GitHubOrg:
+    Type: String
+    Description: GitHub account or organisation that owns the repository.
+    Default: sarsahcodes
+
+  GitHubRepo:
+    Type: String
+    Description: Repository name (without the owner).
+    Default: week-7-dynamo-sam-app
+
+  GitHubBranch:
+    Type: String
+    Description: The single branch allowed to assume this role (develop for dev, main for prod).
+    Default: develop
+
+  CreateOidcProvider:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+    Description: >
+      Set to 'true' for the FIRST bootstrap stack in the account and 'false' for
+      the second - an account can only hold one token.actions.githubusercontent.com provider.
+
+  StackNamePrefix:
+    Type: String
+    Default: week7-orders
+    Description: CloudFormation stack names this role is allowed to manage.
+
+Conditions:
+  ShouldCreateOidcProvider: !Equals [!Ref CreateOidcProvider, 'true']
+
+Resources:
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AppName}-github-deploy-${Environment}'
+      Description: !Sub 'Assumed by GitHub Actions to deploy the ${Environment} stack via SAM.'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com'
+            Action: 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com'
+              StringLike:
+                # Only workflows running on the allowed branch OR bound to the
+                # matching GitHub Environment can mint credentials for this role.
+                'token.actions.githubusercontent.com:sub':
+                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}'
+                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:${Environment}'
+
+      Policies:
+        # -- CloudFormation: only this app's stacks in this environment --------
+        - PolicyName: cloudformation-stack-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:CreateStack'
+                  - 'cloudformation:UpdateStack'
+                  - 'cloudformation:DeleteStack'
+                  - 'cloudformation:DescribeStacks'
+                  - 'cloudformation:DescribeStackEvents'
+                  - 'cloudformation:DescribeStackResource'
+                  - 'cloudformation:DescribeStackResources'
+                  - 'cloudformation:GetTemplate'
+                  - 'cloudformation:ListStackResources'
+                  - 'cloudformation:CreateChangeSet'
+                  - 'cloudformation:DescribeChangeSet'
+                  - 'cloudformation:ExecuteChangeSet'
+                  - 'cloudformation:DeleteChangeSet'
+                  - 'cloudformation:ListChangeSets'
+                  - 'cloudformation:TagResource'
+                  - 'cloudformation:UntagResource'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${StackNamePrefix}-${Environment}/*'
+                  - !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${StackNamePrefix}-${Environment}'
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:ValidateTemplate'
+                  - 'cloudformation:GetTemplateSummary'
+                  - 'cloudformation:ListStacks'
+                  - 'cloudformation:DescribeStackDriftDetectionStatus'
+                Resource: '*'
+              # SAM's managed transform runs from the aws:transform service stack.
+              - Effect: Allow
+                Action: 'cloudformation:CreateChangeSet'
+                Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31'
+
+        # -- S3: only this environment's artifact bucket -----------------------
+        - PolicyName: artifact-bucket-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:ListBucket'
+                  - 's3:GetBucketLocation'
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${AppName}-sam-artifacts-${Environment}-${AWS::AccountId}-${AWS::Region}'
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                  - 's3:AbortMultipartUpload'
+                  - 's3:ListMultipartUploadParts'
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${AppName}-sam-artifacts-${Environment}-${AWS::AccountId}-${AWS::Region}/*'
+
+        # -- DynamoDB: only this environment's table and its indexes -----------
+        - PolicyName: dynamodb-table-access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:CreateTable'
+                  - 'dynamodb:UpdateTable'
+                  - 'dynamodb:DeleteTable'
+                  - 'dynamodb:DescribeTable'
+                  - 'dynamodb:DescribeTimeToLive'
+                  - 'dynamodb:UpdateTimeToLive'
+                  - 'dynamodb:DescribeContinuousBackups'
+                  - 'dynamodb:UpdateContinuousBackups'
+                  - 'dynamodb:TagResource'
+                  - 'dynamodb:UntagResource'
+                  - 'dynamodb:ListTagsOfResource'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-${Environment}'
+                  - !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AppName}-${Environment}/index/*'
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:ListTables'
+                  - 'dynamodb:DescribeLimits'
+                Resource: '*'
+
+Outputs:
+  DeployRoleArn:
+    Description: Set this as the AWS_DEPLOY_ROLE_ARN variable on the matching GitHub Environment.
+    Value: !GetAtt GitHubDeployRole.Arn
+    Export:
+      Name: !Sub '${AppName}-github-deploy-role-${Environment}'
+
+  OidcProviderArn:
+    Condition: ShouldCreateOidcProvider
+    Description: ARN of the GitHub OIDC identity provider (created once per account).
+    Value: !Ref GitHubOidcProvider

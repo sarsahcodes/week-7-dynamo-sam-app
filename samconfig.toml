@@ -1,0 +1,69 @@
+# =============================================================================
+# AWS SAM configuration - one named config environment per deployment stage.
+# Invoked as:  sam deploy --config-env dev   /   sam deploy --config-env prod
+#
+# NOTE: `s3_bucket` is intentionally left out of the [*.deploy.parameters]
+# blocks below because the artifact bucket name embeds the AWS account id.
+# The GitHub Actions workflows pass it with `--s3-bucket ${{ vars.ARTIFACT_BUCKET }}`
+# from the matching GitHub Environment. For local deploys, uncomment the
+# s3_bucket line in the stage you are targeting and fill in your bucket name.
+# =============================================================================
+
+version = 0.1
+
+# -----------------------------------------------------------------------------
+# Global
+# -----------------------------------------------------------------------------
+[default.global.parameters]
+stack_name = "week7-orders-dev"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+# -----------------------------------------------------------------------------
+# DEVELOPMENT
+# -----------------------------------------------------------------------------
+[dev]
+[dev.global.parameters]
+stack_name = "week7-orders-dev"
+
+[dev.deploy.parameters]
+stack_name              = "week7-orders-dev"
+region                  = "eu-central-1"
+capabilities            = "CAPABILITY_IAM"
+confirm_changeset       = false
+fail_on_empty_changeset = false
+resolve_s3              = false
+s3_prefix               = "week7-orders/dev"
+# s3_bucket             = "week7-orders-sam-artifacts-dev-<ACCOUNT_ID>-eu-central-1"
+parameter_overrides     = "Environment=\"dev\" AppName=\"week7-orders\""
+tags                    = "Environment=\"dev\" Application=\"week7-orders\" ManagedBy=\"aws-sam\""
+
+[dev.validate.parameters]
+lint = true
+
+# -----------------------------------------------------------------------------
+# PRODUCTION
+# -----------------------------------------------------------------------------
+[prod]
+[prod.global.parameters]
+stack_name = "week7-orders-prod"
+
+[prod.deploy.parameters]
+stack_name              = "week7-orders-prod"
+region                  = "eu-central-1"
+capabilities            = "CAPABILITY_IAM"
+confirm_changeset       = false
+fail_on_empty_changeset = false
+resolve_s3              = false
+s3_prefix               = "week7-orders/prod"
+# s3_bucket             = "week7-orders-sam-artifacts-prod-<ACCOUNT_ID>-eu-central-1"
+parameter_overrides     = "Environment=\"prod\" AppName=\"week7-orders\""
+tags                    = "Environment=\"prod\" Application=\"week7-orders\" ManagedBy=\"aws-sam\""
+
+[prod.validate.parameters]
+lint = true

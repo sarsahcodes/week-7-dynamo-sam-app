@@ -1,0 +1,9 @@
+{
+  "orderId": "ORD-2001",
+  "createdAt": "2026-09-09T10:00:00Z",
+  "customerId": "CUST-004",
+  "orderStatus": "PENDING",
+  "totalAmount": 599.99,
+  "currency": "GHS",
+  "itemCount": 5
+}

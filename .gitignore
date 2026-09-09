@@ -1,0 +1,22 @@
+# AWS SAM
+.aws-sam/
+samconfig.local.toml
+packaged*.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets - never commit these
+*.pem
+.env
+.env.*
+credentials

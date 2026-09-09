@@ -1,0 +1,47 @@
+[
+  {
+    "orderId":    { "S": "ORD-1001" },
+    "createdAt":  { "S": "2026-09-01T09:15:00Z" },
+    "customerId": { "S": "CUST-001" },
+    "orderStatus":{ "S": "PENDING" },
+    "totalAmount":{ "N": "249.99" },
+    "currency":   { "S": "GHS" },
+    "itemCount":  { "N": "3" }
+  },
+  {
+    "orderId":    { "S": "ORD-1002" },
+    "createdAt":  { "S": "2026-09-02T11:40:00Z" },
+    "customerId": { "S": "CUST-001" },
+    "orderStatus":{ "S": "SHIPPED" },
+    "totalAmount":{ "N": "89.50" },
+    "currency":   { "S": "GHS" },
+    "itemCount":  { "N": "1" }
+  },
+  {
+    "orderId":    { "S": "ORD-1003" },
+    "createdAt":  { "S": "2026-09-03T16:05:00Z" },
+    "customerId": { "S": "CUST-002" },
+    "orderStatus":{ "S": "PENDING" },
+    "totalAmount":{ "N": "1240.00" },
+    "currency":   { "S": "USD" },
+    "itemCount":  { "N": "7" }
+  },
+  {
+    "orderId":    { "S": "ORD-1004" },
+    "createdAt":  { "S": "2026-09-04T08:20:00Z" },
+    "customerId": { "S": "CUST-003" },
+    "orderStatus":{ "S": "DELIVERED" },
+    "totalAmount":{ "N": "35.00" },
+    "currency":   { "S": "GHS" },
+    "itemCount":  { "N": "2" }
+  },
+  {
+    "orderId":    { "S": "ORD-1005" },
+    "createdAt":  { "S": "2026-09-05T13:55:00Z" },
+    "customerId": { "S": "CUST-002" },
+    "orderStatus":{ "S": "CANCELLED" },
+    "totalAmount":{ "N": "410.75" },
+    "currency":   { "S": "USD" },
+    "itemCount":  { "N": "4" }
+  }
+]

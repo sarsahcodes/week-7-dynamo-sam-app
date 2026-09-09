@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Week 7 - Amazon DynamoDB Orders table provisioned with AWS SAM.
+  On-Demand billing, non-default (Standard-IA) table class, composite primary key,
+  named non-key attributes and two Global Secondary Indexes.
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  Environment:
+    Type: String
+    Description: Deployment environment. Drives table name, tags and protection settings.
+    AllowedValues:
+      - dev
+      - prod
+    Default: dev
+
+  AppName:
+    Type: String
+    Description: Logical application name used as a prefix for resource names.
+    Default: week7-orders
+    AllowedPattern: '^[a-z0-9][a-z0-9-]{2,32}$'
+    ConstraintDescription: Lowercase letters, digits and hyphens only (3-33 chars).
+
+# ---------------------------------------------------------------------------
+# Conditions
+# ---------------------------------------------------------------------------
+Conditions:
+  # Production gets deletion protection and point-in-time recovery.
+  IsProd: !Equals [!Ref Environment, prod]
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    # Keep the prod table if the stack is ever deleted; dev is disposable.
+    DeletionPolicy: !If [IsProd, Retain, Delete]
+    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    Properties:
+      TableName: !Sub '${AppName}-${Environment}'
+
+      # --- Requirement: billing mode must be On-Demand -----------------------
+      BillingMode: PAY_PER_REQUEST
+
+      # --- Requirement: must NOT use the default storage class ---------------
+      # Default is STANDARD; this table uses the Standard-Infrequent Access class.
+      TableClass: STANDARD_INFREQUENT_ACCESS
+
+      # --- Attribute definitions --------------------------------------------
+      # Only key attributes (table key + GSI keys) are declared here.
+      # DynamoDB is schemaless for every other attribute on the item.
+      AttributeDefinitions:
+        - AttributeName: orderId          # partition key
+          AttributeType: S
+        - AttributeName: createdAt        # sort key
+          AttributeType: S
+        - AttributeName: customerId       # non-key attribute -> GSI 1 partition key
+          AttributeType: S
+        - AttributeName: orderStatus      # non-key attribute -> GSI 2 partition key
+          AttributeType: S
+
+      # --- Primary key (partition + optional sort key) -----------------------
+      KeySchema:
+        - AttributeName: orderId
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+
+      # --- Two Global Secondary Indexes on non-primary attributes ------------
+      GlobalSecondaryIndexes:
+        # GSI 1: "all orders for a given customer, newest first"
+        - IndexName: CustomerOrdersIndex
+          KeySchema:
+            - AttributeName: customerId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+        # GSI 2: "all orders in a given status, newest first"
+        # Sparse-friendly INCLUDE projection keeps the index small.
+        - IndexName: OrderStatusIndex
+          KeySchema:
+            - AttributeName: orderStatus
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - customerId
+              - totalAmount
+              - currency
+
+      # --- Operational hardening --------------------------------------------
+      SSESpecification:
+        SSEEnabled: true                 # AWS-owned key, no extra cost
+
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+
+      DeletionProtectionEnabled: !If [IsProd, true, false]
+
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+      Tags:
+        - Key: Application
+          Value: !Ref AppName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: aws-sam
+        - Key: Lab
+          Value: week-7-dynamodb-sam
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  TableName:
+    Description: Name of the DynamoDB table (use this in the AWS Console).
+    Value: !Ref OrdersTable
+    Export:
+      Name: !Sub '${AWS::StackName}-TableName'
+
+  TableArn:
+    Description: ARN of the DynamoDB table.
+    Value: !GetAtt OrdersTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TableArn'
+
+  TableStreamArnPlaceholder:
+    Description: Console deep link to the table items view.
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/dynamodbv2/home?region=${AWS::Region}#item-explorer?table=${OrdersTable}'
+
+  CustomerOrdersIndexName:
+    Description: GSI 1 - query orders by customerId.
+    Value: CustomerOrdersIndex
+
+  OrderStatusIndexName:
+    Description: GSI 2 - query orders by orderStatus.
+    Value: OrderStatusIndex

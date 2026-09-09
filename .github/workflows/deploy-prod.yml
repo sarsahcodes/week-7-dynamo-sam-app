@@ -1,0 +1,141 @@
+# =============================================================================
+# PRODUCTION pipeline - deploys ONLY the prod stack, from the main branch,
+# using the prod artifact bucket and the prod OIDC deploy role.
+# Separate file, separate role, separate bucket, separate GitHub Environment
+# (which carries the required-reviewer approval gate).
+# =============================================================================
+name: Deploy PROD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'template.yaml'
+      - 'samconfig.toml'
+      - '.github/workflows/deploy-prod.yml'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  SAM_CONFIG_ENV: prod
+  STACK_NAME: week7-orders-prod
+  TABLE_NAME: week7-orders-prod
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  validate:
+    name: Lint and validate template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: cfn-lint
+        run: |
+          pip install --quiet cfn-lint
+          cfn-lint template.yaml bootstrap/*.yaml
+
+      - name: sam validate
+        run: sam validate --template template.yaml --region "${{ vars.AWS_REGION }}"
+
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy prod stack
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: prod           # protected environment -> manual approval here
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Assume prod deployment role (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: gha-deploy-prod-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: SAM build
+        run: sam build --template template.yaml
+
+      - name: Preview change set (created, not executed)
+        run: |
+          sam deploy \
+            --config-env "${SAM_CONFIG_ENV}" \
+            --stack-name "${STACK_NAME}" \
+            --s3-bucket "${{ vars.ARTIFACT_BUCKET }}" \
+            --s3-prefix "week7-orders/prod" \
+            --region "${{ vars.AWS_REGION }}" \
+            --capabilities CAPABILITY_IAM \
+            --no-execute-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "Environment=prod AppName=week7-orders" \
+            | tee changeset.txt
+          {
+            echo "<details><summary>Prod change set</summary>"
+            echo ""
+            echo '```'
+            cat changeset.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: SAM deploy (prod)
+        run: |
+          sam deploy \
+            --config-env "${SAM_CONFIG_ENV}" \
+            --stack-name "${STACK_NAME}" \
+            --s3-bucket "${{ vars.ARTIFACT_BUCKET }}" \
+            --s3-prefix "week7-orders/prod" \
+            --region "${{ vars.AWS_REGION }}" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "Environment=prod AppName=week7-orders"
+
+      - name: Verify deployed table against the lab requirements
+        run: |
+          set -euo pipefail
+          aws dynamodb describe-table --table-name "${TABLE_NAME}" > table.json
+
+          BILLING=$(jq -r '.Table.BillingModeSummary.BillingMode' table.json)
+          CLASS=$(jq -r '.Table.TableClassSummary.TableClass // "STANDARD"' table.json)
+          GSIS=$(jq -r '[.Table.GlobalSecondaryIndexes[].IndexName] | join(", ")' table.json)
+          GSI_COUNT=$(jq -r '.Table.GlobalSecondaryIndexes | length' table.json)
+
+          echo "Billing mode : $BILLING"
+          echo "Table class  : $CLASS"
+          echo "GSIs ($GSI_COUNT)     : $GSIS"
+
+          [ "$BILLING" = "PAY_PER_REQUEST" ]           || { echo "::error::billing mode is not On-Demand"; exit 1; }
+          [ "$CLASS" = "STANDARD_INFREQUENT_ACCESS" ]  || { echo "::error::table is on the default storage class"; exit 1; }
+          [ "$GSI_COUNT" -ge 2 ]                       || { echo "::error::fewer than two GSIs"; exit 1; }
+
+          {
+            echo "### PROD deployment verified :white_check_mark:"
+            echo ""
+            echo "| Check | Value |"
+            echo "| --- | --- |"
+            echo "| Table | \`$TABLE_NAME\` |"
+            echo "| Billing mode | \`$BILLING\` |"
+            echo "| Table class | \`$CLASS\` |"
+            echo "| GSIs | \`$GSIS\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
