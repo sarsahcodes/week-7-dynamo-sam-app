@@ -70,9 +70,8 @@ can be answered by a `Query` on the base table.
 
 ---
 
-> **Full step-by-step deployment guide, including troubleshooting for every error
-> we hit:** [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The sections below are the
-> condensed version.
+> **What every file does and what each setting means:**
+> [FILE-GUIDE.md](FILE-GUIDE.md).
 
 ## 3. One-time setup
 
