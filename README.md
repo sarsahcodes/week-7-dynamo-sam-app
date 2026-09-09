@@ -77,10 +77,21 @@ roles or S3 buckets.
 ```bash
 export AWS_REGION=eu-central-1
 
-# first environment also creates the account-wide GitHub OIDC provider
-./scripts/bootstrap.sh dev  true
-./scripts/bootstrap.sh prod false
+# Does this account already have the GitHub OIDC provider? (Shared lab
+# accounts usually do - an account can only ever hold one.)
+aws iam list-open-id-connect-providers
+
+# If it exists, reuse it (the default):
+./scripts/bootstrap.sh dev
+./scripts/bootstrap.sh prod
+
+# If it does not exist yet, let the FIRST run create it:
+./scripts/bootstrap.sh dev true
+./scripts/bootstrap.sh prod
 ```
+
+The script checks for the provider itself and reuses it rather than failing, and
+adds the `sts.amazonaws.com` audience if the existing provider is missing it.
 
 This produces two buckets and two roles:
 

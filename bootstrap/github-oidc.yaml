@@ -33,10 +33,13 @@ Parameters:
   CreateOidcProvider:
     Type: String
     AllowedValues: ['true', 'false']
-    Default: 'true'
+    Default: 'false'
     Description: >
-      Set to 'true' for the FIRST bootstrap stack in the account and 'false' for
-      the second - an account can only hold one token.actions.githubusercontent.com provider.
+      An AWS account can hold only ONE token.actions.githubusercontent.com
+      provider. Check with `aws iam list-open-id-connect-providers` first:
+      if the provider is already there (common in shared lab accounts), leave
+      this 'false' for BOTH environments. Set it to 'true' only for the first
+      bootstrap stack in an account that has no GitHub provider yet.
 
   StackNamePrefix:
     Type: String

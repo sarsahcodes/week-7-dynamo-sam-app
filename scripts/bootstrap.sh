@@ -2,8 +2,11 @@
 # -----------------------------------------------------------------------------
 # One-time bootstrap for a single environment.
 #
-#   ./scripts/bootstrap.sh dev  true    # first env in the account -> creates OIDC provider
-#   ./scripts/bootstrap.sh prod false   # second env -> reuses the existing provider
+#   ./scripts/bootstrap.sh dev          # reuses an existing OIDC provider (default)
+#   ./scripts/bootstrap.sh dev true      # ALSO creates the provider (first time in a fresh account)
+#
+# An account can hold only one token.actions.githubusercontent.com provider.
+# The script detects an existing one and refuses to try creating a duplicate.
 #
 # Creates:
 #   1. the environment-scoped SAM artifact S3 bucket
@@ -25,6 +28,31 @@ case "$ENVIRONMENT" in
   prod) BRANCH="main" ;;
   *)    echo "environment must be dev or prod" >&2; exit 1 ;;
 esac
+
+# An account can only have one GitHub OIDC provider - never try to create a second.
+EXISTING_PROVIDER=$(aws iam list-open-id-connect-providers \
+  --query "OpenIDConnectProviderList[?contains(Arn, 'token.actions.githubusercontent.com')].Arn" \
+  --output text 2>/dev/null || true)
+
+if [ -n "${EXISTING_PROVIDER}" ]; then
+  if [ "${CREATE_OIDC}" = "true" ]; then
+    echo ">> GitHub OIDC provider already exists (${EXISTING_PROVIDER}); reusing it."
+    CREATE_OIDC="false"
+  fi
+  # Role assumption fails silently later if this audience is missing.
+  if ! aws iam get-open-id-connect-provider \
+        --open-id-connect-provider-arn "${EXISTING_PROVIDER}" \
+        --query 'ClientIDList' --output text | grep -q 'sts.amazonaws.com'; then
+    echo ">> adding the sts.amazonaws.com audience to the existing provider"
+    aws iam add-client-id-to-open-id-connect-provider \
+      --open-id-connect-provider-arn "${EXISTING_PROVIDER}" \
+      --client-id sts.amazonaws.com
+  fi
+elif [ "${CREATE_OIDC}" != "true" ]; then
+  echo "!! No GitHub OIDC provider found in this account." >&2
+  echo "!! Re-run as: ./scripts/bootstrap.sh ${ENVIRONMENT} true" >&2
+  exit 1
+fi
 
 echo ">> [1/2] artifact bucket for ${ENVIRONMENT}"
 aws cloudformation deploy \
