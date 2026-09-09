@@ -122,6 +122,18 @@ Set three **variables** on each environment (the bootstrap script prints the val
 | `ARTIFACT_BUCKET` | `…-artifacts-dev-…` | `…-artifacts-prod-…` |
 | `AWS_DEPLOY_ROLE_ARN` | `…github-deploy-dev` | `…github-deploy-prod` |
 
+Or let the script read the stack outputs and set them for you (needs the `gh`
+CLI, authenticated with `gh auth login`):
+
+```bash
+./scripts/set-github-vars.sh dev
+./scripts/set-github-vars.sh prod
+```
+
+It creates the GitHub Environment if it does not exist, sets all three
+variables from the live CloudFormation outputs, and prints them back. Add the
+required reviewer on `prod` in the GitHub UI afterwards - that part is manual.
+
 No AWS access keys are stored anywhere. Credentials are minted per job by
 `aws-actions/configure-aws-credentials` and expire in an hour.
 
