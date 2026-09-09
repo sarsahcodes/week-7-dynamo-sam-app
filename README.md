@@ -163,6 +163,13 @@ sam build
 sam deploy --config-env dev --s3-bucket week7-orders-sam-artifacts-dev-<acct>-<region>
 ```
 
+Or in PowerShell, which resolves the bucket name from the bootstrap stack itself:
+
+```powershell
+.\scripts\deploy.ps1 -Environment dev
+.\scripts\deploy.ps1 -Environment prod
+```
+
 ---
 
 ## 5. Verifying the table
