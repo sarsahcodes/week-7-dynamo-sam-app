@@ -39,16 +39,14 @@
     "!Transform mapping"
   ],
 
-  // Don't let the YAML extension try to match these against a generic schema.
-  "yaml.schemas": {
-    "https://raw.githubusercontent.com/aws-cloudformation/cfn-lint/main/src/cfnlint/data/schemas/other/resources/configuration.json": [
-      "template.yaml",
-      "bootstrap/*.yaml"
-    ]
-  },
+  // No JSON schema is attached to the CloudFormation templates on purpose.
+  // The YAML extension has no CloudFormation/SAM schema, and forcing an
+  // unrelated one makes it reject valid template keys. cfn-lint (run in CI and
+  // available via the cfn-lint extension) is what actually validates them.
+  "yaml.schemas": {},
 
-  "files.associations": {
-    "template.yaml": "yaml",
-    "bootstrap/*.yaml": "yaml"
+  "[yaml]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true
   }
 }
