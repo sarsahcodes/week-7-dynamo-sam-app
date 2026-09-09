@@ -419,10 +419,47 @@ payload file yourself.
 
 ### `Not authorized to perform sts:AssumeRoleWithWebIdentity`
 
-Three things must line up:
+STS was reached; the role's **trust policy** rejected the token. Run the
+diagnostic, which checks all four requirements and names the failing one:
+
+```bash
+./scripts/diagnose-oidc.sh dev
+```
+
+**The most likely cause: immutable OIDC subjects.** GitHub is migrating accounts
+to subjects that embed numeric ids:
+
+```
+classic     repo:sarsahcodes/week-7-dynamo-sam-app:ref:refs/heads/develop
+immutable   repo:sarsahcodes@<ownerId>/week-7-dynamo-sam-app@<repoId>:ref:refs/heads/develop
+```
+
+A migrated account sends **only** the immutable form, so a trust policy listing
+just the classic subject never matches. `bootstrap/github-oidc.yaml` accepts both
+forms — redeploy the oidc stack if your role predates that change:
+
+```bash
+./scripts/bootstrap.sh dev
+./scripts/bootstrap.sh prod
+```
+
+To see the subject GitHub actually sent, look at the **Show OIDC subject claim**
+step in the Deploy DEV run. It decodes the token locally and prints the `sub`,
+`aud`, `repository` and `ref` claims — no credential is exposed.
+
+To pin the owner id rather than wildcard it:
+
+```bash
+curl -s https://api.github.com/users/sarsahcodes | grep '"id"'
+GITHUB_ORG_ID=<that number> ./scripts/bootstrap.sh dev
+```
+
+The other three requirements:
 
 1. The workflow declares `permissions: id-token: write` — it does.
-2. The branch matches the role's trust policy: `develop` for dev, `main` for prod.
+2. `AWS_DEPLOY_ROLE_ARN` on the GitHub Environment matches the stack's
+   `DeployRoleArn` output exactly. A stale ARN from a previous lab, whose trust
+   policy names a different repository, is a common cause.
 3. The OIDC provider carries the `sts.amazonaws.com` audience:
 
 ```powershell

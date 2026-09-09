@@ -22,6 +22,10 @@ APP_NAME="week7-orders"
 REGION="${AWS_REGION:-eu-central-1}"
 GITHUB_ORG="sarsahcodes"
 GITHUB_REPO="week-7-dynamo-sam-app"
+# Optional: pin the numeric GitHub owner id in the immutable OIDC subject.
+# Leave empty to wildcard it (the owner NAME stays pinned either way).
+#   GITHUB_ORG_ID=$(curl -s https://api.github.com/users/sarsahcodes | grep '"id"' | head -1)
+GITHUB_ORG_ID="${GITHUB_ORG_ID:-}"
 
 case "$ENVIRONMENT" in
   dev)  BRANCH="develop" ;;
@@ -75,6 +79,7 @@ aws cloudformation deploy \
       "GitHubOrg=${GITHUB_ORG}" \
       "GitHubRepo=${GITHUB_REPO}" \
       "GitHubBranch=${BRANCH}" \
+      "GitHubOrgId=${GITHUB_ORG_ID}" \
       "CreateOidcProvider=${CREATE_OIDC}"
 
 BUCKET=$(aws cloudformation describe-stacks \

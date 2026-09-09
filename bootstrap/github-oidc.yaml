@@ -41,6 +41,20 @@ Parameters:
       this 'false' for BOTH environments. Set it to 'true' only for the first
       bootstrap stack in an account that has no GitHub provider yet.
 
+  GitHubOrgId:
+    Type: String
+    Default: ""
+    Description: >
+      Numeric GitHub owner ID, e.g. 142625676. GitHub is migrating accounts to
+      IMMUTABLE OIDC subjects, which embed numeric ids:
+        classic    repo:<owner>/<repo>:ref:refs/heads/<branch>
+        immutable  repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/<branch>
+      A migrated account sends ONLY the immutable form, so a trust policy that
+      lists just the classic subject fails with "Not authorized to perform
+      sts:AssumeRoleWithWebIdentity". This template accepts BOTH forms either
+      way; setting this pins the owner id instead of wildcarding it.
+      Find it with: curl -s https://api.github.com/users/<owner> | grep '"id"'
+
   StackNamePrefix:
     Type: String
     Default: week7-orders
@@ -48,6 +62,7 @@ Parameters:
 
 Conditions:
   ShouldCreateOidcProvider: !Equals [!Ref CreateOidcProvider, 'true']
+  PinOwnerId: !Not [!Equals [!Ref GitHubOrgId, ""]]
 
 Resources:
 
@@ -81,9 +96,21 @@ Resources:
               StringLike:
                 # Only workflows running on the allowed branch OR bound to the
                 # matching GitHub Environment can mint credentials for this role.
-                'token.actions.githubusercontent.com:sub':
-                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}'
-                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:${Environment}'
+                #
+                # Both subject forms are listed because GitHub is migrating
+                # accounts to immutable subjects that embed numeric ids; a
+                # migrated account sends ONLY the second form. Branch and
+                # environment stay pinned in both, so the scoping is unchanged.
+                'token.actions.githubusercontent.com:sub': !If
+                  - PinOwnerId
+                  - - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}'
+                    - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:${Environment}'
+                    - !Sub 'repo:${GitHubOrg}@${GitHubOrgId}/${GitHubRepo}@*:ref:refs/heads/${GitHubBranch}'
+                    - !Sub 'repo:${GitHubOrg}@${GitHubOrgId}/${GitHubRepo}@*:environment:${Environment}'
+                  - - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}'
+                    - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:${Environment}'
+                    - !Sub 'repo:${GitHubOrg}@*/${GitHubRepo}@*:ref:refs/heads/${GitHubBranch}'
+                    - !Sub 'repo:${GitHubOrg}@*/${GitHubRepo}@*:environment:${Environment}'
 
       Policies:
         # -- CloudFormation: only this app's stacks in this environment --------

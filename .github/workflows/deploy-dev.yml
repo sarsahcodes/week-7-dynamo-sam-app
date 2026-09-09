@@ -63,6 +63,17 @@ jobs:
         with:
           use-installer: true
 
+      # Prints the OIDC subject GitHub is actually sending. The role's trust
+      # policy must match this exact string. Not a credential - the token is
+      # decoded locally and only the claim names below are echoed.
+      - name: Show OIDC subject claim
+        run: |
+          TOKEN=$(curl -sH "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                  "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" \
+                  | python3 -c "import sys,json;print(json.load(sys.stdin)['value'])")
+          echo "$TOKEN" | cut -d. -f2 \
+            | python3 -c "import sys,base64,json;p=sys.stdin.read();p+='='*(-len(p)%4);c=json.loads(base64.urlsafe_b64decode(p));print(json.dumps({k:c[k] for k in ('sub','aud','repository','repository_owner','ref') if k in c}, indent=2))"
+
       - name: Assume dev deployment role (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
