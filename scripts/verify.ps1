@@ -19,14 +19,21 @@ param(
 $ErrorActionPreference = 'Stop'
 $table = "$AppName-$Environment"
 
-# aws-cli on Windows mishandles inline JSON with nested quotes, so every
+# Windows PowerShell 5.1's `Set-Content -Encoding utf8` writes a BOM and the
+# AWS CLI rejects a JSON file that starts with one, so write UTF-8 without one.
+function Write-Utf8NoBom {
+    param([string]$Path, [string]$Content)
+    [System.IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# aws-cli on Windows also mishandles inline JSON with nested quotes, so every
 # --expression-attribute-values payload goes through a temp file.
 function Invoke-GsiQuery {
     param([string]$Index, [string]$KeyCondition, [string]$Placeholder, [string]$Value)
 
     $tmp = New-TemporaryFile
-    @{ $Placeholder = @{ S = $Value } } | ConvertTo-Json -Depth 5 -Compress |
-        Set-Content $tmp -Encoding utf8
+    Write-Utf8NoBom -Path $tmp.FullName -Content (
+        @{ $Placeholder = @{ S = $Value } } | ConvertTo-Json -Depth 5 -Compress)
     try {
         aws dynamodb query --table-name $table --region $Region `
             --index-name $Index `
@@ -34,7 +41,7 @@ function Invoke-GsiQuery {
             --expression-attribute-values "file://$($tmp.FullName)" `
             --output table
     }
-    finally { Remove-Item $tmp -Force }
+    finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
 }
 
 Write-Host "== Table configuration ==" -ForegroundColor Cyan

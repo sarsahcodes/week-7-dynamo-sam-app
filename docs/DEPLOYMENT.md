@@ -404,6 +404,19 @@ git log origin/develop --oneline -1          # did the push actually land?
 You can always start a run by hand: **Actions -> Deploy DEV -> Run workflow**, or
 `gh workflow run "Deploy DEV" --ref develop`.
 
+### `Error parsing parameter '--item': Expected: '=', received: 'i'`
+
+The JSON file passed to the AWS CLI starts with a UTF-8 BOM (`ï»¿`). Windows
+PowerShell 5.1 writes one whenever you use `Set-Content -Encoding utf8`. Write
+the file without a BOM:
+
+```powershell
+[System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
+```
+
+The scripts in this repo already do this; the error only appears if you write a
+payload file yourself.
+
 ### `Not authorized to perform sts:AssumeRoleWithWebIdentity`
 
 Three things must line up:
