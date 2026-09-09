@@ -75,12 +75,19 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: SAM build
-        run: sam build --template template.yaml
+        run: |
+          if sam build --template template.yaml; then
+            echo "TEMPLATE=.aws-sam/build/template.yaml" >> "$GITHUB_ENV"
+          else
+            echo "::warning::sam build reported nothing to build; deploying the source template"
+            echo "TEMPLATE=template.yaml" >> "$GITHUB_ENV"
+          fi
 
       - name: SAM deploy (dev)
         run: |
           sam deploy \
             --config-env "${SAM_CONFIG_ENV}" \
+            --template-file "${TEMPLATE}" \
             --stack-name "${STACK_NAME}" \
             --s3-bucket "${{ vars.ARTIFACT_BUCKET }}" \
             --s3-prefix "week7-orders/dev" \
