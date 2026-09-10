@@ -11,7 +11,7 @@ Description: >
 Parameters:
   Environment:
     Type: String
-    Description: Deployment environment. Drives table name, tags and protection settings.
+    Description: Deployment environment. Drives table name and tags.
     AllowedValues:
       - dev
       - prod
@@ -25,22 +25,15 @@ Parameters:
     ConstraintDescription: Lowercase letters, digits and hyphens only (3-33 chars).
 
 # ---------------------------------------------------------------------------
-# Conditions
-# ---------------------------------------------------------------------------
-Conditions:
-  # Production gets deletion protection and point-in-time recovery.
-  IsProd: !Equals [!Ref Environment, prod]
-
-# ---------------------------------------------------------------------------
 # Resources
 # ---------------------------------------------------------------------------
 Resources:
 
   OrdersTable:
     Type: AWS::DynamoDB::Table
-    # Keep the prod table if the stack is ever deleted; dev is disposable.
-    DeletionPolicy: !If [IsProd, Retain, Delete]
-    UpdateReplacePolicy: !If [IsProd, Retain, Delete]
+    # Keep the table if the stack is ever deleted or the table is replaced.
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: !Sub '${AppName}-${Environment}'
 
@@ -103,9 +96,9 @@ Resources:
         SSEEnabled: true                 # AWS-owned key, no extra cost
 
       PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+        PointInTimeRecoveryEnabled: true
 
-      DeletionProtectionEnabled: !If [IsProd, true, false]
+      DeletionProtectionEnabled: true
 
       TimeToLiveSpecification:
         AttributeName: expiresAt
