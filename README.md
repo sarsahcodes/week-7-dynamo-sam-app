@@ -56,15 +56,22 @@ can be answered by a `Query` on the base table.
 │   └── deploy-prod.yml               # main branch → prod stack only (approval gate)
 ├── scripts/
 │   ├── bootstrap.sh                  # run once per environment
+│   ├── set-github-vars.sh            # push the stack outputs into GitHub
+│   ├── deploy.ps1                    # manual validate/build/deploy (Windows)
 │   ├── seed-items.sh                 # load the sample orders
 │   └── verify.sh                     # prove billing mode, table class, both GSIs
 ├── seed/
 │   ├── sample-orders.json            # 5 orders across 3 customers and 4 statuses
 │   └── console-item.json             # single item to paste into the console
-└── docs/CONSOLE-VERIFICATION.md      # click-by-click CRUD walkthrough
+└── docs/
+    ├── DEPLOYMENT.md                 # full deployment guide + troubleshooting
+    └── CONSOLE-VERIFICATION.md       # click-by-click CRUD walkthrough
 ```
 
 ---
+
+> **What every file does and what each setting means:**
+> [FILE-GUIDE.md](FILE-GUIDE.md).
 
 ## 3. One-time setup
 
@@ -122,6 +129,18 @@ Set three **variables** on each environment (the bootstrap script prints the val
 | `ARTIFACT_BUCKET` | `…-artifacts-dev-…` | `…-artifacts-prod-…` |
 | `AWS_DEPLOY_ROLE_ARN` | `…github-deploy-dev` | `…github-deploy-prod` |
 
+Or let the script read the stack outputs and set them for you (needs the `gh`
+CLI, authenticated with `gh auth login`):
+
+```bash
+./scripts/set-github-vars.sh dev
+./scripts/set-github-vars.sh prod
+```
+
+It creates the GitHub Environment if it does not exist, sets all three
+variables from the live CloudFormation outputs, and prints them back. Add the
+required reviewer on `prod` in the GitHub UI afterwards - that part is manual.
+
 No AWS access keys are stored anywhere. Credentials are minted per job by
 `aws-actions/configure-aws-credentials` and expire in an hour.
 
@@ -149,6 +168,13 @@ the workflow summary, so the rubric evidence is on every run.
 sam validate --lint
 sam build
 sam deploy --config-env dev --s3-bucket week7-orders-sam-artifacts-dev-<acct>-<region>
+```
+
+Or in PowerShell, which resolves the bucket name from the bootstrap stack itself:
+
+```powershell
+.\scripts\deploy.ps1 -Environment dev
+.\scripts\deploy.ps1 -Environment prod
 ```
 
 ---

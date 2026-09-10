@@ -9,10 +9,6 @@ name: Deploy DEV
 on:
   push:
     branches: [develop]
-    paths:
-      - 'template.yaml'
-      - 'samconfig.toml'
-      - '.github/workflows/deploy-dev.yml'
   workflow_dispatch:
 
 # Short-lived credentials via OpenID Connect - no AWS keys stored in GitHub.
@@ -66,6 +62,33 @@ jobs:
       - uses: aws-actions/setup-sam@v2
         with:
           use-installer: true
+
+      # Prints the OIDC subject GitHub is actually sending. The role's trust
+      # policy must match this exact string. Not a credential - the token is
+      # decoded locally and only the claim names below are echoed.
+      - name: Show OIDC subject claim
+        continue-on-error: true      # diagnostic only - never fail the deploy
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=sts.amazonaws.com"
+          req = urllib.request.Request(
+              url,
+              headers={"Authorization": "bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]},
+          )
+          token = json.load(urllib.request.urlopen(req))["value"]
+
+          # JWT payload is the middle segment, base64url with padding stripped.
+          payload = token.split(".")[1].strip()
+          payload += "=" * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+
+          print("This is the subject your role's trust policy must match:\n")
+          for k in ("sub", "aud", "repository", "repository_owner", "ref", "environment"):
+              if k in claims:
+                  print(f"  {k:18} {claims[k]}")
+          PY
 
       - name: Assume dev deployment role (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
