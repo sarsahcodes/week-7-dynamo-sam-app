@@ -3,6 +3,10 @@
 # using the prod artifact bucket and the prod OIDC deploy role.
 # Separate file, separate role, separate bucket, separate GitHub Environment
 # (which carries the required-reviewer approval gate).
+#
+# The steps call the same .github/scripts/ helpers as the dev pipeline, with
+# different environment values - so prod cannot quietly diverge from what dev
+# was tested with.
 # =============================================================================
 name: Deploy PROD
 
@@ -42,9 +46,7 @@ jobs:
           use-installer: true
 
       - name: cfn-lint
-        run: |
-          pip install --quiet cfn-lint
-          cfn-lint template.yaml bootstrap/*.yaml
+        run: bash .github/scripts/lint-templates.sh
 
       - name: sam validate
         run: sam validate --template template.yaml --region "${{ vars.AWS_REGION }}"
@@ -70,76 +72,29 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: SAM build
-        run: |
-          if sam build --template template.yaml; then
-            echo "TEMPLATE=.aws-sam/build/template.yaml" >> "$GITHUB_ENV"
-          else
-            echo "::warning::sam build reported nothing to build; deploying the source template"
-            echo "TEMPLATE=template.yaml" >> "$GITHUB_ENV"
-          fi
+        run: bash .github/scripts/sam-build.sh
 
+      # MODE=preview creates the change set with --no-execute-changeset and
+      # folds it into the job summary, so the approver reads the diff there.
       - name: Preview change set (created, not executed)
-        run: |
-          sam deploy \
-            --config-env "${SAM_CONFIG_ENV}" \
-            --template-file "${TEMPLATE}" \
-            --stack-name "${STACK_NAME}" \
-            --s3-bucket "${{ vars.ARTIFACT_BUCKET }}" \
-            --s3-prefix "week7-orders/prod" \
-            --region "${{ vars.AWS_REGION }}" \
-            --capabilities CAPABILITY_IAM \
-            --no-execute-changeset \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides "Environment=prod AppName=week7-orders" \
-            | tee changeset.txt
-          {
-            echo "<details><summary>Prod change set</summary>"
-            echo ""
-            echo '```'
-            cat changeset.txt
-            echo '```'
-            echo "</details>"
-          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ENVIRONMENT: prod
+          MODE: preview
+        run: bash .github/scripts/sam-deploy.sh
 
       - name: SAM deploy (prod)
-        run: |
-          sam deploy \
-            --config-env "${SAM_CONFIG_ENV}" \
-            --template-file "${TEMPLATE}" \
-            --stack-name "${STACK_NAME}" \
-            --s3-bucket "${{ vars.ARTIFACT_BUCKET }}" \
-            --s3-prefix "week7-orders/prod" \
-            --region "${{ vars.AWS_REGION }}" \
-            --capabilities CAPABILITY_IAM \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides "Environment=prod AppName=week7-orders"
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ENVIRONMENT: prod
+        run: bash .github/scripts/sam-deploy.sh
 
+      # Same script the dev pipeline runs - one definition of "correct table",
+      # so dev and prod can never drift apart on what they check.
       - name: Verify deployed table against the lab requirements
-        run: |
-          set -euo pipefail
-          aws dynamodb describe-table --table-name "${TABLE_NAME}" > table.json
-
-          BILLING=$(jq -r '.Table.BillingModeSummary.BillingMode' table.json)
-          CLASS=$(jq -r '.Table.TableClassSummary.TableClass // "STANDARD"' table.json)
-          GSIS=$(jq -r '[.Table.GlobalSecondaryIndexes[].IndexName] | join(", ")' table.json)
-          GSI_COUNT=$(jq -r '.Table.GlobalSecondaryIndexes | length' table.json)
-
-          echo "Billing mode : $BILLING"
-          echo "Table class  : $CLASS"
-          echo "GSIs ($GSI_COUNT)     : $GSIS"
-
-          [ "$BILLING" = "PAY_PER_REQUEST" ]           || { echo "::error::billing mode is not On-Demand"; exit 1; }
-          [ "$CLASS" = "STANDARD_INFREQUENT_ACCESS" ]  || { echo "::error::table is on the default storage class"; exit 1; }
-          [ "$GSI_COUNT" -ge 2 ]                       || { echo "::error::fewer than two GSIs"; exit 1; }
-
-          {
-            echo "### PROD deployment verified :white_check_mark:"
-            echo ""
-            echo "| Check | Value |"
-            echo "| --- | --- |"
-            echo "| Table | \`$TABLE_NAME\` |"
-            echo "| Billing mode | \`$BILLING\` |"
-            echo "| Table class | \`$CLASS\` |"
-            echo "| GSIs | \`$GSIS\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ENVIRONMENT_LABEL: PROD
+        run: bash .github/scripts/verify-table.sh
